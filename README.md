@@ -45,7 +45,7 @@ You can obtain the WASM hash after deploying your `smart-wallet` contract to a s
 The `sdk/` directory contains the core TypeScript SDK. You can install it in your project via npm or yarn:
 
 ```bash
-npm add @stellar-aa/sdk
+npm add stellar-aa-sdk
 ```
 
 ### Key Features of the SDK:
@@ -62,7 +62,7 @@ npm add @stellar-aa/sdk
 ### Basic Usage Example (TypeScript):
 
 ```typescript
-import { WalletFactory, SmartWallet, StellarSDK } from '@stellar-aa/sdk';
+import { WalletFactory, SmartWallet, StellarSDK } from 'stellar-aa-sdk';
 
 const { Keypair, Networks } = StellarSDK;
 

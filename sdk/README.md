@@ -7,7 +7,7 @@ This package provides the TypeScript SDK for interacting with the Stellar Accoun
 You can install the SDK using npm:
 
 ```bash
-npm install @stellar-aa/sdk
+npm install stellar-aa-sdk
 ```
 
 ## Usage
@@ -53,7 +53,7 @@ Deploys a new `SmartWallet` contract and initializes it with the specified `owne
 **Example:**
 
 ```typescript
-import { WalletFactory, StellarSDK } from '@stellar-aa/sdk';
+import { WalletFactory, StellarSDK } from 'stellar-aa-sdk';
 
 const { Keypair, Networks } = StellarSDK;
 
@@ -147,7 +147,7 @@ These methods perform simulations and do not require transaction signing.
 ### Example Usage (Continued from Factory Deployment)
 
 ```typescript
-import { SmartWallet, StellarSDK } from '@stellar-aa/sdk';
+import { SmartWallet, StellarSDK } from 'stellar-aa-sdk';
 
 // Assuming contractId and ownerKeypair are obtained from WalletFactory.createWallet()
 const { contractId, ownerKeypair } = await deployNewWallet(); // Call the example from above

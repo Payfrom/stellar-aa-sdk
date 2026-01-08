@@ -1,8 +1,4 @@
-import {
-  WalletFactory,
-  SmartWallet,
-  StellarSDK,
-} from "@stellar-aa/sdk";
+import { WalletFactory, SmartWallet, StellarSDK } from "stellar-aa-sdk";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -145,8 +141,11 @@ async function getOrCreateGuardians(existingGuardians?: Guardian[]): Promise<{
 
 async function testSDK() {
   // Get or create test account
-  const { keypair, contractId: existingContractId, guardians: existingGuardians } =
-    await getOrCreateTestAccount();
+  const {
+    keypair,
+    contractId: existingContractId,
+    guardians: existingGuardians,
+  } = await getOrCreateTestAccount();
 
   // Test 1: Create factory
   console.log("\n► Creating WalletFactory...");
@@ -164,10 +163,7 @@ async function testSDK() {
     console.log("\n► Deploying smart wallet...");
     console.log("  • Owner:", keypair.publicKey());
 
-    contractId = await factory.createWallet(
-      keypair.publicKey(),
-      keypair
-    );
+    contractId = await factory.createWallet(keypair.publicKey(), keypair);
 
     console.log("  ✓ Wallet deployed:", contractId);
     saveContractId(contractId);
@@ -220,7 +216,9 @@ async function testSDK() {
 
   // Test 7: Add guardians
   console.log("\n► Testing guardian management...");
-  const { guardian1, guardian2, guardian3 } = await getOrCreateGuardians(existingGuardians);
+  const { guardian1, guardian2, guardian3 } = await getOrCreateGuardians(
+    existingGuardians
+  );
 
   console.log("  • Guardian accounts:");
   console.log("    - Guardian 1:", guardian1.publicKey());
@@ -255,7 +253,12 @@ async function testSDK() {
   console.log("\n► Testing recovery flow...");
   const newOwnerKeypair = Keypair.random();
   console.log("  • New owner:", newOwnerKeypair.publicKey());
-  console.log("  • Using guardians:", guardian1.publicKey().slice(0, 8) + "...", "and", guardian2.publicKey().slice(0, 8) + "...");
+  console.log(
+    "  • Using guardians:",
+    guardian1.publicKey().slice(0, 8) + "...",
+    "and",
+    guardian2.publicKey().slice(0, 8) + "..."
+  );
 
   try {
     await wallet.recover(
@@ -271,7 +274,10 @@ async function testSDK() {
     // Verify new owner
     const recoveredOwner = await wallet.getOwner();
     console.log("  ✓ New owner:", recoveredOwner);
-    console.log("  ✓ Owner matches:", recoveredOwner === newOwnerKeypair.publicKey());
+    console.log(
+      "  ✓ Owner matches:",
+      recoveredOwner === newOwnerKeypair.publicKey()
+    );
   } catch (error: any) {
     console.error("  ✗ Recovery failed:", error.message || error);
   }
