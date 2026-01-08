@@ -1,0 +1,20 @@
+{
+  "name": "@stellar-aa/sdk",
+  "version": "1.0.0",
+  "description": "Stellar Account Abstraction SDK",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["stellar", "soroban", "account-abstraction"],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@stellar/stellar-sdk": "^14.4.3",
+    "@types/node": "^25.0.3",
+    "typescript": "^5.9.3"
+  }
+}
