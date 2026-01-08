@@ -64,34 +64,20 @@ To build and deploy this smart contract, you will need the Soroban SDK CLI and R
 Navigate to this directory (`contracts/smart-wallet`) and run the following command to build the WASM file:
 
 ```bash
-soroban contract build
+stellar contract build
 ```
 
-This will generate a `.wasm` file in the `target/wasm32-unknown-unknown/release/` directory.
+This will generate a `.wasm` file in the `target/wasm32v1-none/release/` directory.
 
 ### Deploy
 
-Once built, you can deploy the contract to a Soroban network using the `soroban contract deploy` command. You will need a funded account and access to a Soroban RPC endpoint.
-
-#### Option 1: Deploy WASM directly
+Once built, you can deploy the contract to a Soroban network using the `stellar contract deploy` command. You will need a funded account and access to a Soroban RPC endpoint.
 
 ```bash
-soroban contract deploy \
-  --wasm target/wasm32-unknown-unknown/release/smart_wallet.wasm \
-  --source YOUR_SOURCE_ACCOUNT_SECRET_KEY \
-  --rpc-url https://soroban-testnet.stellar.org \
-  --network-passphrase "Test SDF Network ; September 2015"
-```
-
-#### Option 2: Install WASM and use hash (recommended for factory pattern)
-
-```bash
-# Install the WASM to get a hash
-soroban contract install \
-  --wasm target/wasm32-unknown-unknown/release/smart_wallet.wasm \
-  --source YOUR_SOURCE_ACCOUNT_SECRET_KEY \
-  --rpc-url https://soroban-testnet.stellar.org \
-  --network-passphrase "Test SDF Network ; September 2015"
+stellar contract deploy \
+  --wasm target/wasm32v1-none/release/smart_wallet.wasm \
+  --source-account <account_name> \
+  --network testnet
 ```
 
 This will return a WASM hash (e.g., `8a02111e765f6fc970a95b9af8efc137649a611b2b576a52bfe5c59a0a1a5da0`). The WASM hash is what you'll use when initializing the `WalletFactory` in the SDK to deploy multiple wallet instances from the same contract code.
