@@ -1,6 +1,6 @@
 {
   "name": "stellar-aa-sdk",
-  "version": "0.1.1",
+  "version": "2.0.0",
   "description": "Account Abstraction SDK for Stellar/Soroban - Session keys, social recovery, and smart contract wallets",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
