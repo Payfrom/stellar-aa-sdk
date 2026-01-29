@@ -38,12 +38,12 @@ export class WalletFactory {
 
   /**
    * Creates a new SmartWallet instance for a user
-   * @param ownerPublicKey - The public key that will own this wallet
+   * @param ownerKeypair - The keypair that will own this wallet (used to derive address and public key)
    * @param sourceKeypair - Keypair to pay for deployment and sign transactions
    * @returns The contract ID of the newly deployed wallet
    */
   async createWallet(
-    ownerPublicKey: string,
+    ownerKeypair: StellarSDK.Keypair,
     sourceKeypair: StellarSDK.Keypair
   ): Promise<string> {
     // 1. Deploy new contract instance from WASM hash
@@ -56,7 +56,11 @@ export class WalletFactory {
       networkPassphrase: this.networkPassphrase,
     });
 
-    await wallet.initialize(ownerPublicKey, sourceKeypair);
+    // Get the raw public key (32 bytes) from the keypair
+    const ownerPublicKey = ownerKeypair.publicKey();
+    const ownerRawPublicKey = ownerKeypair.rawPublicKey();
+
+    await wallet.initialize(ownerPublicKey, ownerRawPublicKey, sourceKeypair);
 
     return contractId;
   }

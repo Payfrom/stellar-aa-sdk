@@ -1,4 +1,6 @@
-import { WalletFactory, SmartWallet, StellarSDK } from "stellar-aa-sdk";
+import { WalletFactory } from "../sdk/src/WalletFactory";
+import { SmartWallet } from "../sdk/src/SmartWallet";
+import * as StellarSDK from "@stellar/stellar-sdk";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -22,7 +24,7 @@ async function fundAccount(publicKey: string): Promise<void> {
   console.log(`► Funding account ${publicKey.slice(0, 8)}... via Friendbot...`);
   try {
     const response = await fetch(
-      `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`
+      `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`,
     );
     if (!response.ok) {
       const text = await response.text();
@@ -56,7 +58,7 @@ async function getOrCreateTestAccount(): Promise<{
   if (fs.existsSync(TEST_ACCOUNT_FILE)) {
     console.log("► Loading existing test account...");
     const data = JSON.parse(
-      fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8")
+      fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8"),
     ) as TestAccount;
     const keypair = Keypair.fromSecret(data.secretKey);
     console.log("  ✓ Loaded account:", data.publicKey);
@@ -88,7 +90,7 @@ async function getOrCreateTestAccount(): Promise<{
 
 function saveContractId(contractId: string): void {
   const data = JSON.parse(
-    fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8")
+    fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8"),
   ) as TestAccount;
   data.contractId = contractId;
   fs.writeFileSync(TEST_ACCOUNT_FILE, JSON.stringify(data, null, 2));
@@ -97,7 +99,7 @@ function saveContractId(contractId: string): void {
 
 function saveGuardians(guardians: Guardian[]): void {
   const data = JSON.parse(
-    fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8")
+    fs.readFileSync(TEST_ACCOUNT_FILE, "utf-8"),
   ) as TestAccount;
   data.guardians = guardians;
   fs.writeFileSync(TEST_ACCOUNT_FILE, JSON.stringify(data, null, 2));
@@ -151,7 +153,7 @@ async function testSDK() {
   console.log("\n► Creating WalletFactory...");
   const factory = new WalletFactory({
     wasmHash:
-      "8a02111e765f6fc970a95b9af8efc137649a611b2b576a52bfe5c59a0a1a5da0",
+      "d6ab7a7ab47085df18aa8c526581d24a792b232f84f04ac3d85d4ee519a70eb0",
     rpcUrl: "https://soroban-testnet.stellar.org",
     networkPassphrase: Networks.TESTNET,
   });
@@ -163,7 +165,7 @@ async function testSDK() {
     console.log("\n► Deploying smart wallet...");
     console.log("  • Owner:", keypair.publicKey());
 
-    contractId = await factory.createWallet(keypair.publicKey(), keypair);
+    contractId = await factory.createWallet(keypair, keypair);
 
     console.log("  ✓ Wallet deployed:", contractId);
     saveContractId(contractId);
@@ -197,9 +199,10 @@ async function testSDK() {
 
   await wallet.createSession(
     sessionKeypair.publicKey(),
+    sessionKeypair.rawPublicKey(),
     sessionLimit,
     sessionDuration,
-    keypair
+    keypair,
   );
   console.log("  ✓ Session created");
   await waitForConfirmation();
@@ -216,9 +219,8 @@ async function testSDK() {
 
   // Test 7: Add guardians
   console.log("\n► Testing guardian management...");
-  const { guardian1, guardian2, guardian3 } = await getOrCreateGuardians(
-    existingGuardians
-  );
+  const { guardian1, guardian2, guardian3 } =
+    await getOrCreateGuardians(existingGuardians);
 
   console.log("  • Guardian accounts:");
   console.log("    - Guardian 1:", guardian1.publicKey());
@@ -235,7 +237,7 @@ async function testSDK() {
     console.log("  • Adding guardians to contract...");
     await wallet.addGuardians(
       [guardian1.publicKey(), guardian2.publicKey(), guardian3.publicKey()],
-      keypair
+      keypair,
     );
     console.log("  ✓ Guardians added to contract");
     await waitForConfirmation();
@@ -257,16 +259,17 @@ async function testSDK() {
     "  • Using guardians:",
     guardian1.publicKey().slice(0, 8) + "...",
     "and",
-    guardian2.publicKey().slice(0, 8) + "..."
+    guardian2.publicKey().slice(0, 8) + "...",
   );
 
   try {
     await wallet.recover(
       newOwnerKeypair.publicKey(),
+      newOwnerKeypair.rawPublicKey(),
       guardian1.publicKey(),
       guardian2.publicKey(),
       guardian1,
-      guardian2
+      guardian2,
     );
     console.log("  ✓ Wallet recovered with new owner");
     await waitForConfirmation();
@@ -276,7 +279,7 @@ async function testSDK() {
     console.log("  ✓ New owner:", recoveredOwner);
     console.log(
       "  ✓ Owner matches:",
-      recoveredOwner === newOwnerKeypair.publicKey()
+      recoveredOwner === newOwnerKeypair.publicKey(),
     );
   } catch (error: any) {
     console.error("  ✗ Recovery failed:", error.message || error);
