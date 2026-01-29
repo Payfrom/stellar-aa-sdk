@@ -12,7 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@stellar/stellar-sdk": "^14.4.3",
-    "stellar-aa-sdk": "^0.1.0",
+    "stellar-aa-sdk": "file:../sdk",
     "typescript": "^5.9.3"
   }
 }

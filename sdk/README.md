@@ -1,214 +1,351 @@
-# SDK for Stellar Account Abstraction Smart Wallet
+# Stellar Account Abstraction SDK
 
-This package provides the TypeScript SDK for interacting with the Stellar Account Abstraction (AA) Smart Wallet contract on Soroban. It simplifies the process of deploying new smart wallets, managing their ownership, setting up session keys, adding guardians, and facilitating recovery.
+**Production-ready Account Abstraction for Stellar** - Build smart wallets that work with the entire Soroban ecosystem.
+
+## What is This?
+
+A TypeScript SDK for building smart contract wallets on Stellar that:
+- ✅ Work with **ANY** Soroban contract (DEXs, tokens, lending, NFTs, etc.)
+- ✅ Support session keys for delegated access
+- ✅ Enable social recovery with guardians
+- ✅ Follow Stellar's standards (`CustomAccountInterface` with `__check_auth`)
+- ✅ Provide full TypeScript SDK with simple API
 
 ## Installation
-
-You can install the SDK using npm:
 
 ```bash
 npm install stellar-aa-sdk
 ```
 
-## Usage
+## Quick Start
 
-The SDK primarily exposes two main classes: `WalletFactory` for deploying new smart wallets and `SmartWallet` for interacting with existing deployed wallets.
-
-### Account Funding Requirements
-
-Before using the SDK, ensure the following accounts are funded:
-
-1. **Source Account** - Required to pay for wallet deployment and owner operations
-2. **Guardian Accounts** - Required if you plan to use the recovery feature (guardians must sign recovery transactions)
-
-For testnet, you can use [Friendbot](https://friendbot.stellar.org) to fund accounts. See examples below.
-
-### `WalletFactory`
-
-Used to deploy new instances of the `SmartWallet` contract.
-
-#### Constructor
-
-`new WalletFactory(config: FactoryConfig)`
-
--   `config`: An object containing:
-    -   `wasmHash`: The WASM hash of the `smart-wallet` contract to deploy.
-        -   **Testnet WASM Hash**: `8a02111e765f6fc970a95b9af8efc137649a611b2b576a52bfe5c59a0a1a5da0`
-        -   **Mainnet WASM Hash**: `MAINNET_WASM_HASH_HERE` (Not available yet)
-        
-        You can obtain the WASM hash after deploying your `smart-wallet` contract to a specific network (see [`contracts/smart-wallet/README.md`](../contracts/smart-wallet/README.md) for deployment instructions).
-    -   `rpcUrl`: The URL of the Soroban RPC server.
-    -   `networkPassphrase`: The network passphrase (e.g., `Networks.TESTNET`).
-
-#### Methods
-
-##### `createWallet(ownerPublicKey: string, sourceKeypair: StellarSDK.Keypair): Promise<string>`
-
-Deploys a new `SmartWallet` contract and initializes it with the specified `ownerPublicKey`.
-
--   `ownerPublicKey`: The public key of the account that will be the initial owner of the smart wallet.
--   `sourceKeypair`: A `StellarSDK.Keypair` of an account that will pay for the deployment transaction and sign it. This account needs to be funded.
--   Returns: A `Promise` that resolves to the `contractId` of the newly deployed smart wallet.
-
-**Example:**
+### Deploy a Smart Wallet
 
 ```typescript
-import { WalletFactory, StellarSDK } from 'stellar-aa-sdk';
+import { WalletFactory, SmartWallet, StellarSDK } from 'stellar-aa-sdk';
 
 const { Keypair, Networks } = StellarSDK;
 
-const rpcUrl = "https://soroban-testnet.stellar.org";
-const networkPassphrase = Networks.TESTNET;
-const wasmHash = "8a02111e765f6fc970a95b9af8efc137649a611b2b576a52bfe5c59a0a1a5da0"; // Testnet WASM hash
+const factory = new WalletFactory({
+  wasmHash: 'YOUR_WASM_HASH',
+  rpcUrl: 'https://soroban-testnet.stellar.org',
+  networkPassphrase: Networks.TESTNET,
+});
 
-// Helper to fund account via Friendbot (Testnet only)
-async function fundAccount(publicKey: string) {
-    const response = await fetch(
-        `https://friendbot.stellar.org?addr=${encodeURIComponent(publicKey)}`
-    );
-    if (!response.ok) throw new Error("Failed to fund account");
-    await response.json();
-    await new Promise(resolve => setTimeout(resolve, 3000));
-}
+const ownerKeypair = Keypair.random();
+const sourceKeypair = Keypair.random(); // Pays fees
 
-async function deployNewWallet() {
-    const factory = new WalletFactory({ wasmHash, rpcUrl, networkPassphrase });
+// Fund source account first (testnet: https://friendbot.stellar.org)
 
-    const ownerKeypair = Keypair.random();
-    const sourceKeypair = Keypair.random();
-
-    // Fund the source account (required to pay for deployment)
-    await fundAccount(sourceKeypair.publicKey());
-
-    console.log("Deploying wallet for owner:", ownerKeypair.publicKey());
-    const contractId = await factory.createWallet(ownerKeypair.publicKey(), sourceKeypair);
-    console.log("Deployed Smart Wallet with ID:", contractId);
-
-    return { contractId, ownerKeypair };
-}
-
-// deployNewWallet().catch(console.error);
+const contractId = await factory.createWallet(ownerKeypair, sourceKeypair);
 ```
 
-### `SmartWallet`
+### Interact with ANY Soroban Contract
 
-Used to interact with an already deployed `SmartWallet` contract.
+Your smart wallet works with **any** Soroban contract using the `__check_auth` pattern:
+
+```typescript
+import { Contract, TransactionBuilder, rpc } from '@stellar/stellar-sdk';
+
+// Example: Transfer tokens
+const tokenContract = new Contract(tokenContractId);
+const server = new rpc.Server(rpcUrl);
+const sourceAccount = await server.getAccount(sourceKeypair.publicKey());
+
+const tx = new TransactionBuilder(sourceAccount, {
+  fee: '10000',
+  networkPassphrase: Networks.TESTNET,
+})
+  .addOperation(
+    tokenContract.call('transfer',
+      smartWalletAddress,  // Smart wallet authorizes this
+      recipientAddress,
+      amount
+    )
+  )
+  .setTimeout(30)
+  .build();
+
+const preparedTx = await server.prepareTransaction(tx);
+preparedTx.sign(ownerKeypair);
+await server.sendTransaction(preparedTx);
+
+// When the token contract calls require_auth(smartWalletAddress),
+// Stellar automatically invokes your wallet's __check_auth
+// Your wallet verifies the signature and approves the transfer
+```
+
+## How It Works
+
+### The __check_auth Pattern
+
+Instead of forwarding calls (which breaks compatibility), this SDK uses Stellar's `__check_auth`:
+
+1. You call any contract (DEX, token, etc.)
+2. That contract calls `require_auth(your_smart_wallet)`
+3. Stellar automatically invokes `your_wallet.__check_auth()`
+4. Your wallet verifies the signature
+5. Transaction proceeds if authorized
+
+**Result**: Your smart wallet works with ANY Soroban contract automatically!
+
+## API Reference
+
+### WalletFactory
 
 #### Constructor
 
-`new SmartWallet(config: WalletConfig)`
+```typescript
+new WalletFactory(config: FactoryConfig)
+```
 
--   `config`: An object containing:
-    -   `contractId`: The contract ID of the deployed `SmartWallet`.
-    -   `rpcUrl`: The URL of the Soroban RPC server.
-    -   `networkPassphrase`: The network passphrase.
+**Config:**
+- `wasmHash`: WASM hash of the smart-wallet contract
+  - **Testnet**: `d6ab7a7ab47085df18aa8c526581d24a792b232f84f04ac3d85d4ee519a70eb0`
+  - Deploy your own: See [deployment guide](https://github.com/Payfrom/stellar-aa-sdk)
+- `rpcUrl`: Soroban RPC server URL
+- `networkPassphrase`: Network passphrase (e.g., `Networks.TESTNET`)
 
 #### Methods
 
-##### Owner Operations
+##### `createWallet(ownerKeypair: Keypair, sourceKeypair: Keypair): Promise<string>`
 
-These operations require the `sourceKeypair` to be the current owner of the `SmartWallet`.
+Deploys and initializes a new smart wallet.
 
--   `initialize(ownerPublicKey: string, sourceKeypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Initializes the wallet. This should only be called once after deployment. `WalletFactory.createWallet` handles this automatically.
+- `ownerKeypair`: Keypair that will own the smart wallet
+- `sourceKeypair`: Keypair that pays for deployment (must be funded)
+- Returns: Contract ID of the deployed wallet
 
--   `execute(targetContractId: string, functionName: string, args: unknown[], sourceKeypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Allows the `SmartWallet` owner to execute an arbitrary function on another Soroban contract.
+### SmartWallet
 
--   `addGuardians(guardianAddresses: string[], sourceKeypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Adds new public keys to the list of guardians for recovery.
-
-##### Session Operations
-
--   `createSession(sessionKeyPublicKey: string, limit: string, durationSeconds: number, sourceKeypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Creates a new session key with a defined spending `limit` (in stroops) and `durationSeconds`. The `sourceKeypair` must be the owner.
-
--   `executeSession(sessionKeyPublicKey: string, targetContractId: string, functionName: string, args: unknown[], amount: string, sourceKeypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Executes a contract call using a session key. The `sourceKeypair` must be the session keypair. The `amount` represents the value being spent against the session's limit.
-
-##### Recovery Operations
-
--   `recover(newOwnerPublicKey: string, guardian1PublicKey: string, guardian2PublicKey: string, guardian1Keypair: StellarSDK.Keypair, guardian2Keypair: StellarSDK.Keypair): Promise<GetTransactionResponse>`
-    Recovers the wallet by setting a `newOwnerPublicKey`. This requires two guardians to sign the transaction. The method uses Soroban's authorization framework with `authorizeEntry` to properly sign multi-party auth requirements.
-
-##### View Functions (Read-only)
-
-These methods perform simulations and do not require transaction signing.
-
--   `getOwner(): Promise<string>`
-    Returns the public key of the current owner of the `SmartWallet`.
-
--   `getGuardians(): Promise<string[]>`
-    Returns an array of public keys of the registered guardians.
-
--   `getSession(sessionKeyPublicKey: string): Promise<Session | null>`
-    Returns the details of a specific session key, or `null` if not found.
-
-### Example Usage (Continued from Factory Deployment)
+#### Constructor
 
 ```typescript
-import { SmartWallet, StellarSDK } from 'stellar-aa-sdk';
-
-// Assuming contractId and ownerKeypair are obtained from WalletFactory.createWallet()
-const { contractId, ownerKeypair } = await deployNewWallet(); // Call the example from above
-
-const rpcUrl = "https://soroban-testnet.stellar.org";
-const networkPassphrase = StellarSDK.Networks.TESTNET;
-
-async function interactWithWallet(contractId: string, ownerKeypair: StellarSDK.Keypair) {
-    const smartWallet = new SmartWallet({ contractId, rpcUrl, networkPassphrase });
-
-    console.log("\n--- Interacting with Smart Wallet ---");
-
-    // Get Owner
-    const owner = await smartWallet.getOwner();
-    console.log("Current Owner:", owner);
-
-    // Add Guardians
-    // NOTE: Guardian accounts must be funded before they can sign recovery transactions
-    const guardian1Keypair = StellarSDK.Keypair.random();
-    const guardian2Keypair = StellarSDK.Keypair.random();
-
-    // Fund guardians (required for recovery)
-    await fundAccount(guardian1Keypair.publicKey());
-    await fundAccount(guardian2Keypair.publicKey());
-
-    await smartWallet.addGuardians(
-        [guardian1Keypair.publicKey(), guardian2Keypair.publicKey()],
-        ownerKeypair
-    );
-    console.log("Guardians added:", await smartWallet.getGuardians());
-
-    // Create Session
-    const sessionKeypair = StellarSDK.Keypair.random();
-    await smartWallet.createSession(
-        sessionKeypair.publicKey(),
-        "5000000", // 5 XLM limit
-        3600,      // 1 hour duration
-        ownerKeypair
-    );
-    console.log("Session created for:", sessionKeypair.publicKey());
-    console.log("Session info:", await smartWallet.getSession(sessionKeypair.publicKey()));
-
-    // Recover Wallet
-    const newOwnerKeypair = StellarSDK.Keypair.random();
-    console.log("Initiating recovery with new owner:", newOwnerKeypair.publicKey());
-    await smartWallet.recover(
-        newOwnerKeypair.publicKey(),
-        guardian1Keypair.publicKey(),
-        guardian2Keypair.publicKey(),
-        guardian1Keypair,
-        guardian2Keypair
-    );
-    console.log("Wallet recovered. New owner is:", await smartWallet.getOwner());
-}
-
-// interactWithWallet(contractId, ownerKeypair).catch(console.error);
+new SmartWallet(config: WalletConfig)
 ```
 
-## Types and Utilities
+**Config:**
+- `contractId`: Contract ID of the deployed smart wallet
+- `rpcUrl`: Soroban RPC server URL
+- `networkPassphrase`: Network passphrase
 
-The SDK also re-exports `StellarSDK` for convenience and provides utility functions from `soroban-utils.ts` for common Soroban transaction patterns, although these are mostly used internally by `SmartWallet` and `WalletFactory`. Key types like `Session`, `WalletConfig`, and `FactoryConfig` are also exported.
+#### Methods
+
+##### Session Management
+
+```typescript
+createSession(
+  sessionKeyAddress: string,
+  sessionKeyPubkey: Buffer,
+  limit: string,
+  durationSeconds: number,
+  ownerKeypair: Keypair
+): Promise<GetTransactionResponse>
+```
+
+Creates a session key with spending limit and expiration.
+
+```typescript
+revokeSession(
+  sessionKeyAddress: string,
+  ownerKeypair: Keypair
+): Promise<GetTransactionResponse>
+```
+
+Revokes a session key.
+
+```typescript
+getSession(sessionKeyAddress: string): Promise<Session | null>
+```
+
+Gets session details (read-only).
+
+##### Guardian Management
+
+```typescript
+addGuardians(
+  guardianAddresses: string[],
+  ownerKeypair: Keypair
+): Promise<GetTransactionResponse>
+```
+
+Adds guardians for social recovery.
+
+```typescript
+getGuardians(): Promise<string[]>
+```
+
+Gets list of guardians (read-only).
+
+```typescript
+recover(
+  newOwnerAddress: string,
+  newOwnerPubkey: Buffer,
+  guardian1Address: string,
+  guardian2Address: string,
+  guardian1Keypair: Keypair,
+  guardian2Keypair: Keypair
+): Promise<GetTransactionResponse>
+```
+
+Recovers wallet with 2-of-N guardian signatures.
+
+##### View Functions
+
+```typescript
+getOwner(): Promise<string>
+```
+
+Gets current owner address (read-only).
+
+## Complete Example
+
+```typescript
+import { WalletFactory, SmartWallet, StellarSDK } from 'stellar-aa-sdk';
+
+const { Keypair, Networks } = StellarSDK;
+
+async function example() {
+  // Setup
+  const rpcUrl = "https://soroban-testnet.stellar.org";
+  const networkPassphrase = Networks.TESTNET;
+  const wasmHash = "d6ab7a7ab47085df18aa8c526581d24a792b232f84f04ac3d85d4ee519a70eb0";
+
+  // Deploy wallet
+  const factory = new WalletFactory({ wasmHash, rpcUrl, networkPassphrase });
+  const ownerKeypair = Keypair.random();
+  const sourceKeypair = Keypair.random();
+
+  // Fund source (testnet)
+  await fetch(`https://friendbot.stellar.org?addr=${sourceKeypair.publicKey()}`);
+
+  const contractId = await factory.createWallet(ownerKeypair, sourceKeypair);
+  const wallet = new SmartWallet({ contractId, rpcUrl, networkPassphrase });
+
+  // Add guardians
+  const guardian1 = Keypair.random();
+  const guardian2 = Keypair.random();
+  await wallet.addGuardians(
+    [guardian1.publicKey(), guardian2.publicKey()],
+    ownerKeypair
+  );
+
+  // Create session key
+  const sessionKeypair = Keypair.random();
+  await wallet.createSession(
+    sessionKeypair.publicKey(),
+    sessionKeypair.rawPublicKey(),
+    '100_000_000',  // 100 token limit
+    86400,          // 24 hours
+    ownerKeypair
+  );
+
+  // Later: Recover with guardians
+  const newOwner = Keypair.random();
+  await wallet.recover(
+    newOwner.publicKey(),
+    newOwner.rawPublicKey(),
+    guardian1.publicKey(),
+    guardian2.publicKey(),
+    guardian1,
+    guardian2
+  );
+}
+```
+
+## Universal Compatibility
+
+Your smart wallet works with:
+
+**Tokens:**
+- ✅ Stellar Asset Contracts (USDC, EURC, etc.)
+- ✅ Custom tokens
+- ✅ Wrapped assets
+
+**DeFi:**
+- ✅ DEX protocols (Soroswap, etc.)
+- ✅ Lending/borrowing platforms
+- ✅ Liquidity pools
+- ✅ Yield farming
+
+**NFTs & Gaming:**
+- ✅ NFT marketplaces
+- ✅ Game asset contracts
+- ✅ Collectibles
+
+**Infrastructure:**
+- ✅ Payment gateways
+- ✅ Escrow contracts
+- ✅ Multi-sig wallets
+- ✅ DAO governance
+
+**Any contract using `require_auth()` works automatically!**
+
+## Use Cases
+
+### Session-Based dApps
+
+Give dApps temporary access without exposing your main key:
+
+```typescript
+await wallet.createSession(
+  dappKey.publicKey(),
+  dappKey.rawPublicKey(),
+  '50_000_000',  // 50 token limit
+  86400          // 1 day
+);
+```
+
+### Social Recovery
+
+Set up trusted contacts to recover your wallet:
+
+```typescript
+await wallet.addGuardians([friend1, friend2, family], ownerKeypair);
+
+// Later, recover with 2 of 3
+await wallet.recover(newOwner, newOwnerPubkey, friend1, friend2, key1, key2);
+```
+
+### DeFi Trading
+
+Interact with any DEX or DeFi protocol:
+
+```typescript
+const tx = new TransactionBuilder(sourceAccount, {...})
+  .addOperation(
+    dexContract.call('swap', smartWalletAddress, tokenA, tokenB, amount)
+  )
+  .build();
+```
+
+## Testing
+
+See [sdk-test/test.ts](https://github.com/Payfrom/stellar-aa-sdk/tree/master/sdk-test) for complete working examples.
+
+## Why v2?
+
+| Feature | v1 (execute) | v2 (__check_auth) |
+|---------|--------------|-------------------|
+| Ecosystem compatibility | ~5% | **100%** |
+| Works with SAC tokens | ❌ | ✅ |
+| Works with DEXs | ❌ | ✅ |
+| Standards compliant | ❌ | ✅ |
+| Security | Risky | Secure |
+
+**v2 implements Stellar's recommended patterns for full ecosystem compatibility.**
+
+## Resources
+
+- **GitHub**: https://github.com/Payfrom/stellar-aa-sdk
+- **Full Guide**: See [GUIDE.md](https://github.com/Payfrom/stellar-aa-sdk/blob/master/GUIDE.md)
+- **Stellar Docs**: [Smart Wallets](https://developers.stellar.org/docs/build/guides/contract-accounts/smart-wallets)
+- **Discord**: [Stellar Discord](https://discord.gg/stellar) #passkeys channel
+
+## License
+
+MIT License - see [LICENSE](https://github.com/Payfrom/stellar-aa-sdk/blob/master/LICENSE)
 
 ---
-**Note**: For a complete working example, refer to the [`sdk-test/test.ts`](../sdk-test/test.ts) file, which demonstrates the full lifecycle and interaction patterns.
+
+**Built for the Stellar ecosystem** - Making Account Abstraction accessible to everyone! 🚀

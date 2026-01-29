@@ -8,9 +8,10 @@ export type ScVal = any;
 // Smart Wallet contract interface
 export enum ContractMethod {
   Initialize = 'initialize',
-  Execute = 'execute',
+  Execute = 'execute', // DEPRECATED - kept for compatibility
   CreateSession = 'create_session',
-  ExecuteSession = 'execute_session',
+  RevokeSession = 'revoke_session',
+  ExecuteSession = 'execute_session', // DEPRECATED - kept for compatibility
   AddGuardians = 'add_guardians',
   Recover = 'recover',
   GetOwner = 'get_owner',

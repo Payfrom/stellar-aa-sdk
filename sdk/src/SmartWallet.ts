@@ -94,30 +94,61 @@ export class SmartWallet {
 
   /* Owner Operations */
 
-  /** Initialize wallet with owner */
-  async initialize(ownerPublicKey: string, sourceKeypair: StellarSDK.Keypair) {
+  /**
+   * Initialize wallet with owner
+   * @param ownerPublicKey - The Stellar address of the owner
+   * @param ownerRawPublicKey - The raw 32-byte public key for signature verification
+   * @param sourceKeypair - Keypair to pay for the transaction
+   */
+  async initialize(
+    ownerPublicKey: string,
+    ownerRawPublicKey: Buffer,
+    sourceKeypair: StellarSDK.Keypair
+  ) {
+    const pubKeyScVal = nativeToScVal(ownerRawPublicKey, { type: "bytes" });
     return this.callContract(
       ContractMethod.Initialize,
-      [new Address(ownerPublicKey).toScVal()],
+      [new Address(ownerPublicKey).toScVal(), pubKeyScVal as ScVal],
       sourceKeypair
     );
   }
 
-  /** Execute contract call (owner only) */
+  /**
+   * DEPRECATED: The execute() pattern has been removed.
+   *
+   * With __check_auth, you now interact with contracts directly.
+   * The smart wallet's authorization is automatically verified when the target
+   * contract calls require_auth() on the smart wallet address.
+   *
+   * Example:
+   * ```typescript
+   * // Instead of: wallet.execute(tokenContract, "transfer", [...])
+   * // Do: Call the target contract directly with the smart wallet as the authorizing address
+   *
+   * const tokenContract = new Contract(tokenContractId);
+   * const tx = new TransactionBuilder(...)
+   *   .addOperation(
+   *     tokenContract.call("transfer",
+   *       smartWalletAddress, // The smart wallet authorizes this
+   *       recipientAddress,
+   *       amount
+   *     )
+   *   )
+   *   .build();
+   * ```
+   *
+   * @deprecated Use direct contract interaction instead
+   */
   async execute(
-    targetContractId: string,
-    functionName: string,
-    args: unknown[],
-    sourceKeypair: StellarSDK.Keypair
-  ) {
-    return this.callContract(
-      ContractMethod.Execute,
-      [
-        new Address(targetContractId).toScVal(),
-        nativeToScVal(functionName, { type: "symbol" }),
-        nativeToScVal(this.toScArgs(args), { type: "vec" }),
-      ],
-      sourceKeypair
+    _targetContractId: string,
+    _functionName: string,
+    _args: unknown[],
+    _sourceKeypair: StellarSDK.Keypair
+  ): Promise<never> {
+    throw new Error(
+      "execute() has been removed. With __check_auth, interact with contracts directly. " +
+      "The smart wallet's __check_auth will be called automatically when the target contract " +
+      "calls require_auth(). See SDK documentation for examples."
     );
   }
 
@@ -138,17 +169,27 @@ export class SmartWallet {
 
   /* Session operations */
 
-  /** Create session key (owner only) */
+  /**
+   * Create session key (owner only)
+   * @param sessionKeyPublicKey - The Stellar address of the session key
+   * @param sessionRawPublicKey - The raw 32-byte public key for signature verification
+   * @param limit - Spending limit for this session
+   * @param durationSeconds - How long the session is valid
+   * @param sourceKeypair - Owner's keypair to authorize
+   */
   async createSession(
     sessionKeyPublicKey: string,
+    sessionRawPublicKey: Buffer,
     limit: string,
     durationSeconds: number,
     sourceKeypair: StellarSDK.Keypair
   ) {
+    const pubKeyScVal = nativeToScVal(sessionRawPublicKey, { type: "bytes" });
     return this.callContract(
       ContractMethod.CreateSession,
       [
         new Address(sessionKeyPublicKey).toScVal(),
+        pubKeyScVal as ScVal,
         nativeToScVal(BigInt(limit), { type: "i128" }),
         nativeToScVal(durationSeconds, { type: "u64" }),
       ],
@@ -156,32 +197,60 @@ export class SmartWallet {
     );
   }
 
-  /** Execute using session key */
-  async executeSession(
+  /**
+   * Revoke a session key (owner only)
+   * @param sessionKeyPublicKey - The address of the session key to revoke
+   * @param sourceKeypair - Owner's keypair to authorize
+   */
+  async revokeSession(
     sessionKeyPublicKey: string,
-    targetContractId: string,
-    functionName: string,
-    args: unknown[],
-    amount: string,
     sourceKeypair: StellarSDK.Keypair
   ) {
     return this.callContract(
-      ContractMethod.ExecuteSession,
-      [
-        new Address(sessionKeyPublicKey).toScVal(),
-        new Address(targetContractId).toScVal(),
-        nativeToScVal(functionName, { type: "symbol" }),
-        nativeToScVal(this.toScArgs(args), { type: "vec" }),
-        nativeToScVal(BigInt(amount), { type: "i128" }),
-      ],
+      ContractMethod.RevokeSession,
+      [new Address(sessionKeyPublicKey).toScVal()],
       sourceKeypair
+    );
+  }
+
+  /**
+   * DEPRECATED: The executeSession() pattern has been removed.
+   *
+   * Session keys now work through __check_auth. When you sign a transaction
+   * with a session key, the smart wallet automatically verifies it's valid
+   * and within spending limits when require_auth() is called.
+   *
+   * @deprecated Session keys are now verified automatically in __check_auth
+   */
+  async executeSession(
+    _sessionKeyPublicKey: string,
+    _targetContractId: string,
+    _functionName: string,
+    _args: unknown[],
+    _amount: string,
+    _sourceKeypair: StellarSDK.Keypair
+  ): Promise<never> {
+    throw new Error(
+      "executeSession() has been removed. Session keys are now verified automatically " +
+      "in __check_auth when you interact with contracts. Create a session key with " +
+      "createSession(), then use it to sign transactions directly."
     );
   }
 
   /* Recovery (requires 2 guardian signatures) */
 
+  /**
+   * Recover wallet with guardians
+   * @param newOwnerPublicKey - The new owner's Stellar address
+   * @param newOwnerRawPublicKey - The new owner's raw 32-byte public key
+   * @param guardian1PublicKey - First guardian's address
+   * @param guardian2PublicKey - Second guardian's address
+   * @param guardian1Keypair - First guardian's keypair to sign
+   * @param guardian2Keypair - Second guardian's keypair to sign
+   */
   async recover(
     newOwnerPublicKey: string,
+    newOwnerRawPublicKey: Buffer,
     guardian1PublicKey: string,
     guardian2PublicKey: string,
     guardian1Keypair: StellarSDK.Keypair,
@@ -200,6 +269,7 @@ export class SmartWallet {
         this.contract.call(
           ContractMethod.Recover,
           new Address(newOwnerPublicKey).toScVal(),
+          nativeToScVal(newOwnerRawPublicKey, { type: "bytes" }) as ScVal,
           new Address(guardian1PublicKey).toScVal(),
           new Address(guardian2PublicKey).toScVal()
         )
